@@ -128,6 +128,9 @@ float3 CelShading(float nl, float vh, float nv, float3 shadowColor, float3 specu
 	float darkness = (nl * 0.5 + 0.5) * shadow;
 	float3 I = lerp(shadowColor, 1.0, smoothstep(x - bias, x, darkness));
 
+	if((x + bias) >= 1.0)
+		I = shadowColor;
+
 	return I;
 }
 
