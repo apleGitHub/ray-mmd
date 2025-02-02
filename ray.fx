@@ -74,6 +74,53 @@ static float3 mColorShadowSunP = pow(float3(mSunShadowRP, mSunShadowGP, mSunShad
 static float3 mColorBalanceP = float3(mColBalanceRP, mColBalanceGP, mColBalanceBP);
 static float3 mColorBalanceM = float3(mColBalanceRM, mColBalanceGM, mColBalanceBM);
 
+float mSunLayer0FadeM : CONTROLOBJECT<string name="sun_controller.pmx"; string item = "Layer0-";>;
+float mSunLayer1FadeM : CONTROLOBJECT<string name="sun_controller.pmx"; string item = "Layer1-";>;
+float mSunLayer2FadeM : CONTROLOBJECT<string name="sun_controller.pmx"; string item = "Layer2-";>;
+float mSunLayer3FadeM : CONTROLOBJECT<string name="sun_controller.pmx"; string item = "Layer3-";>;
+float mSunLayer4FadeM : CONTROLOBJECT<string name="sun_controller.pmx"; string item = "Layer4-";>;
+float mSunLayer5FadeM : CONTROLOBJECT<string name="sun_controller.pmx"; string item = "Layer5-";>;
+float mSunLayer6FadeM : CONTROLOBJECT<string name="sun_controller.pmx"; string item = "Layer6-";>;
+float mSunLayer7FadeM : CONTROLOBJECT<string name="sun_controller.pmx"; string item = "Layer7-";>;
+
+static float2x4 mSunLayers = {
+	mSunLayer0FadeM, mSunLayer1FadeM, mSunLayer2FadeM, mSunLayer3FadeM,
+	mSunLayer4FadeM, mSunLayer5FadeM, mSunLayer6FadeM, mSunLayer7FadeM
+};
+
+float mSSRSmoothnessP : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Smoothness+";>;
+float mSSRSmoothnessM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Smoothness-";>;
+float mSSRBlurP : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Blur+";>;
+float mSSRBlurM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Blur-";>;
+float mSSRThicknessP : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Thickness+";>;
+float mSSRThicknessM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Thickness-";>;
+float mSSROffsetP : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Offset+";>;
+float mSSROffsetM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Offset-";>;
+float mSSRBrightnessP : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Brightness+";>;
+float mSSRBrightnessM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Brightness-";>;
+float mSSRFresnelP : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Fresnel+";>;
+float mSSRFresnelM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Fresnel-";>;
+float mSSRLayer0FadeM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Layer0-";>;
+float mSSRLayer1FadeM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Layer1-";>;
+float mSSRLayer2FadeM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Layer2-";>;
+float mSSRLayer3FadeM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Layer3-";>;
+float mSSRLayer4FadeM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Layer4-";>;
+float mSSRLayer5FadeM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Layer5-";>;
+float mSSRLayer6FadeM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Layer6-";>;
+float mSSRLayer7FadeM : CONTROLOBJECT<string name="ssr_controller.pmx"; string item = "Layer7-";>;
+
+static float2x4 mSSRLayers = {
+	mSSRLayer0FadeM, mSSRLayer1FadeM, mSSRLayer2FadeM, mSSRLayer3FadeM,
+	mSSRLayer4FadeM, mSSRLayer5FadeM, mSSRLayer6FadeM, mSSRLayer7FadeM
+};
+
+static float mSSRBlur = lerp(lerp(1024, 512, mSSRBlurP), 4096, mSSRBlurM);
+static float mSSRThickness = lerp(lerp(0.5, 5, mSSRThicknessP), 0.01, mSSRThicknessM);
+static float mSSROffset = lerp(lerp(0.1, 2, mSSROffsetP), 0.05, mSSROffsetM);
+static float mSSRSmoothness = lerp(lerp(0.0, 2, mSSRSmoothnessP), -1, mSSRSmoothnessM);
+static float mSSRBrightness = lerp(lerp(1, 10, mSSRBrightnessP), 0, mSSRBrightnessM);
+static float mSSRFresnel = lerp(lerp(0.5, 1, mSSRFresnelP), 0, mSSRFresnelM); 
+
 #include "shader/math.fxsub"
 #include "shader/common.fxsub"
 #include "shader/textures.fxsub"
@@ -81,10 +128,13 @@ static float3 mColorBalanceM = float3(mColBalanceRM, mColBalanceGM, mColBalanceB
 #include "shader/ibl.fxsub"
 #include "shader/BRDF.fxsub"
 #include "shader/ColorGrading.fxsub"
+#include "shader/Layer.fxsub"
 #include "shader/ShadingMaterials.fxsub"
 
 #if SUN_SHADOW_QUALITY && SUN_LIGHT_ENABLE
 #	include "shader/ShadowMapCascaded.fxsub"
+#	include "shader/CascadeShadow.fxsub"
+#	include "shader/ShadowSamplingTent.fxsub"
 #	include "shader/ShadowMap.fxsub"
 #endif
 
@@ -102,6 +152,10 @@ static float3 mColorBalanceM = float3(mColBalanceRM, mColBalanceGM, mColBalanceB
 
 #if TOON_ENABLE == 2
 #	include "shader/PostProcessDiffusion.fxsub"
+#endif
+
+#if SSR_QUALITY
+#   include "shader/HZB.fxsub"
 #endif
 
 #if SSR_QUALITY
@@ -235,6 +289,21 @@ technique DeferredLighting<
 #if TOON_ENABLE == 2
 	"RenderColorTarget=ShadingMapTemp; 	Pass=DiffusionBlurX;"
 	"RenderColorTarget=ShadingMap; 		Pass=DiffusionBlurY;"
+#endif
+
+#if SSR_QUALITY
+	"RenderColorTarget=ZBufferMipmap1;		  	  Pass=ZBufferMipmap1;"
+	"RenderColorTarget=ZBufferMipmap2;		      Pass=ZBufferMipmap2;"
+	"RenderColorTarget=ZBufferMipmap3;		      Pass=ZBufferMipmap3;"
+	"RenderColorTarget=ZBufferMipmap4;		 	  Pass=ZBufferMipmap4;"
+	"RenderColorTarget=ZBufferMipmap5;		      Pass=ZBufferMipmap5;"
+	"RenderColorTarget=ZBufferMipmap6;		      Pass=ZBufferMipmap6;"
+	"RenderColorTarget=ZBufferMipmap7;		      Pass=ZBufferMipmap7;"
+	"RenderColorTarget=ZBufferMipmap8;		      Pass=ZBufferMipmap8;"
+	"RenderColorTarget=ZBufferMipmap9;		      Pass=ZBufferMipmap9;"
+	"RenderColorTarget=ZBufferMipmap10;		      Pass=ZBufferMipmap10;"
+
+ 	"RenderColorTarget=ZBufferMipmap;		      Pass=ZBufferCombine;"
 #endif
 
 #if SSR_QUALITY
@@ -503,6 +572,74 @@ technique DeferredLighting<
 		VertexShader = compile vs_3_0 ScreenSpaceQuadVS();
 		PixelShader  = compile ps_3_0 ScreenSpaceBilateralFilterPS(ShadingMapTempSamp, mDiffusionOffsetY);
 	}
+#endif
+#if SSR_QUALITY
+	pass ZBufferMipmap1<string Script= "Draw=Buffer;";>{
+		AlphaBlendEnable = false; AlphaTestEnable = false;
+		ZEnable = false; ZWriteEnable = false;
+		VertexShader = compile vs_3_0 ScreenSpaceQuadOffsetVS(0);
+		PixelShader  = compile ps_3_0 ZBufferMipmap_1_PS(Gbuffer8Map);
+	}
+	pass ZBufferMipmap2<string Script= "Draw=Buffer;";>{
+		AlphaBlendEnable = false; AlphaTestEnable = false;
+		ZEnable = false; ZWriteEnable = false;
+		VertexShader = compile vs_3_0 ScreenSpaceQuadOffsetVS(0);
+		PixelShader  = compile ps_3_0 ZBufferMipmap_N_PS(ZBufferMipmap1Samp, kHZBMip2ViewportSize, kHZBMip1ViewportSize);
+	}
+	pass ZBufferMipmap3<string Script= "Draw=Buffer;";>{
+		AlphaBlendEnable = false; AlphaTestEnable = false;
+		ZEnable = false; ZWriteEnable = false;
+		VertexShader = compile vs_3_0 ScreenSpaceQuadOffsetVS(0);
+		PixelShader  = compile ps_3_0 ZBufferMipmap_N_PS(ZBufferMipmap2Samp, kHZBMip3ViewportSize, kHZBMip2ViewportSize);
+	}
+	pass ZBufferMipmap4<string Script= "Draw=Buffer;";>{
+		AlphaBlendEnable = false; AlphaTestEnable = false;
+		ZEnable = false; ZWriteEnable = false;
+		VertexShader = compile vs_3_0 ScreenSpaceQuadOffsetVS(0);
+		PixelShader  = compile ps_3_0 ZBufferMipmap_N_PS(ZBufferMipmap3Samp, kHZBMip4ViewportSize, kHZBMip3ViewportSize);
+	}
+	pass ZBufferMipmap5<string Script= "Draw=Buffer;";>{
+		AlphaBlendEnable = false; AlphaTestEnable = false;
+		ZEnable = false; ZWriteEnable = false;
+		VertexShader = compile vs_3_0 ScreenSpaceQuadOffsetVS(0);
+		PixelShader  = compile ps_3_0 ZBufferMipmap_N_PS(ZBufferMipmap4Samp, kHZBMip5ViewportSize, kHZBMip4ViewportSize);
+	}
+	pass ZBufferMipmap6<string Script= "Draw=Buffer;";>{
+		AlphaBlendEnable = false; AlphaTestEnable = false;
+		ZEnable = false; ZWriteEnable = false;
+		VertexShader = compile vs_3_0 ScreenSpaceQuadOffsetVS(0);
+		PixelShader  = compile ps_3_0 ZBufferMipmap_N_PS(ZBufferMipmap5Samp, kHZBMip6ViewportSize, kHZBMip5ViewportSize);
+	}
+	pass ZBufferMipmap7<string Script= "Draw=Buffer;";>{
+		AlphaBlendEnable = false; AlphaTestEnable = false;
+		ZEnable = false; ZWriteEnable = false;
+		VertexShader = compile vs_3_0 ScreenSpaceQuadOffsetVS(0);
+		PixelShader  = compile ps_3_0 ZBufferMipmap_N_PS(ZBufferMipmap6Samp, kHZBMip7ViewportSize, kHZBMip6ViewportSize);
+	}
+	pass ZBufferMipmap8<string Script= "Draw=Buffer;";>{
+		AlphaBlendEnable = false; AlphaTestEnable = false;
+		ZEnable = false; ZWriteEnable = false;
+		VertexShader = compile vs_3_0 ScreenSpaceQuadOffsetVS(0);
+		PixelShader  = compile ps_3_0 ZBufferMipmap_N_PS(ZBufferMipmap7Samp, kHZBMip8ViewportSize, kHZBMip7ViewportSize);
+	}
+	pass ZBufferMipmap9<string Script= "Draw=Buffer;";>{
+		AlphaBlendEnable = false; AlphaTestEnable = false;
+		ZEnable = false; ZWriteEnable = false;
+		VertexShader = compile vs_3_0 ScreenSpaceQuadOffsetVS(0);
+		PixelShader  = compile ps_3_0 ZBufferMipmap_N_PS(ZBufferMipmap8Samp, kHZBMip9ViewportSize, kHZBMip8ViewportSize);
+	}
+	pass ZBufferMipmap10<string Script= "Draw=Buffer;";>{
+		AlphaBlendEnable = false; AlphaTestEnable = false;
+		ZEnable = false; ZWriteEnable = false;
+		VertexShader = compile vs_3_0 ScreenSpaceQuadOffsetVS(0);
+		PixelShader  = compile ps_3_0 ZBufferMipmap_N_PS(ZBufferMipmap9Samp, kHZBMip10ViewportSize, kHZBMip9ViewportSize);
+	}
+	pass ZBufferCombine<string Script= "Draw=Buffer;";>{
+ 		AlphaBlendEnable = false; AlphaTestEnable = false;
+ 		ZEnable = false; ZWriteEnable = false;
+ 		VertexShader = compile vs_3_0 ScreenSpaceQuadVS();
+ 		PixelShader  = compile ps_3_0 ZBufferMipmapCombinePS();
+ 	}
 #endif
 #if SSR_QUALITY
 	pass SSRConeTracing<string Script= "Draw=Buffer;";>{
