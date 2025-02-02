@@ -3,12 +3,12 @@
 #elif SSR_QUALITY == 2
 #	define SSR_SAMPLER_COUNT 64
 #elif SSR_QUALITY >= 3
-#	define SSR_SAMPLER_COUNT 128
+#	define SSR_SAMPLER_COUNT 256
 #else
 #	define SSR_SAMPLER_COUNT 32
 #endif
 
-static const float2 SSRScale = 512 * float2(ViewportAspect, 1);
+static const float2 SSRScale = 4096 * float2(ViewportAspect, 1);
 
 static const float2 SSROffsetX1 = float2(1 / SSRScale.x, 0.0);
 static const float2 SSROffsetX2 = float2(2 / SSRScale.x, 0.0);
@@ -132,7 +132,7 @@ float4 SSRConeTracingPS(in float4 coord : TEXCOORD0, in float3 viewdir : TEXCOOR
 	if (!hitTest)
 		clip(-1);
 
-	float2 boundary = abs(coord.xy * 2 - 1);
+	float2 boundary = abs(coord.xy * 0.2 - 0.1);
 	float fadeDiffRcp = 1.0f / max(0.01, 1 - mSSRFadeStart);
 	float fadeOnBorder = 1.0f - saturate((boundary.x - mSSRFadeStart) * fadeDiffRcp);
 	fadeOnBorder *= 1.0f - saturate((boundary.y - mSSRFadeStart) * fadeDiffRcp);
@@ -149,7 +149,7 @@ float4 SSRGaussionBlurPS(in float2 coord : TEXCOORD0, uniform sampler source, un
 {
 	static const float weights[5] = {0.20236, 0.179044, 0.124009, 0.067234, 0.028532};
 
-	float2 start = coord - offset * 4;
+	float2 start = coord - offset * 0;
 
 	float4 color = 0;
 	color += tex2Dlod(source, float4(start, 0, 0)) * weights[4]; start += offset;
@@ -178,7 +178,7 @@ float4 SSRFinalCombiePS(in float2 coord : TEXCOORD0, in float3 viewdir : TEXCOOR
 	float gloss = material.smoothness;
 	float gloss2 = gloss * gloss;
 
-	float weight = frac(min(gloss2, 0.9999) * 3);
+	float weight = frac(min(gloss2, 1.0) * 3);
 
 	float4 refl0 = tex2Dlod(SSRLightX1Samp, float4(coord, 0, 0));
 	float4 refl1 = tex2Dlod(SSRLightX2Samp, float4(coord, 0, 0));
