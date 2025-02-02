@@ -194,11 +194,22 @@ float4 ShadingTransparentPS(
 	float4 MRT3 = tex2Dlod(Gbuffer3Map, float4(coord, 0, 0));
 	float4 MRT4 = tex2Dlod(Gbuffer4Map, float4(coord, 0, 0));
 
-	float3 emissive0 = DecodeGBufferEmissive(MRT3, MRT4);
-	float3 emissive1 = material.customDataB * material.customDataA * any(material.lightModel == SHADINGMODELID_EMISSIVE);
-
-	lighting += lerp(emissive0, emissive1, MRT8.a) * lerp(1.0, float3(0.6,0.45,0.25), pow(1.0 - saturate(dot(material.normal, V)), 2.5));
-
+	if(material.lightModel == SHADINGMODELID_EMISSIVE)
+	{
+		float3 emissive0 = DecodeGBufferEmissive(MRT3, MRT4);
+		float emissive0alpha = DecodeGBufferAlpha(MRT4);
+		float3 emissive1 = material.customDataB * material.emissiveIntensity;
+		
+		lighting += (emissive0 * emissive0alpha * ( 1.0 - material.alpha ) + emissive1 * material.alpha) * lerp(1.0, float3(0.6,0.45,0.25), pow(1.0 - saturate(dot(material.normal, V)), 2.5));
+	}
+	else
+	{
+		float3 emissive0 = DecodeGBufferEmissive(MRT3, MRT4);
+		float3 emissive1 = 0;
+		
+		lighting += lerp(emissive0, emissive1, material.alpha) * lerp(1.0, float3(0.6,0.45,0.25), pow(1.0 - saturate(dot(material.normal, V)), 2.5));	
+	}
+	
 #if OUTLINE_QUALITY
 	#if OUTLINE_QUALITY == 1
 		float4 edge = tex2Dlod(OutlineMapSamp, float4(coord, 0, 0));

@@ -19,6 +19,7 @@ struct MaterialParam
 	float3 albedo;
 	float3 specular;
 	float smoothness;
+	float emissiveIntensity;
 	float alpha;
 	float visibility;
 	float customDataA;
@@ -92,6 +93,7 @@ void DecodeGbuffer(float4 buffer1, float4 buffer2, float4 buffer3, float4 buffer
 	material.linearDepth = buffer4.x;
 	material.visibility = buffer4.z;
 	material.lightModel = (int)floor(buffer4.w);
+	material.emissiveIntensity = buffer4.y;
 
 	if (material.lightModel >= SHADINGMODELID_MASK)
 		material.lightModel = SHADINGMODELID_DEFAULT;
@@ -100,14 +102,19 @@ void DecodeGbuffer(float4 buffer1, float4 buffer2, float4 buffer3, float4 buffer
 	{
 		material.specular = buffer3.x;
 		material.customDataB = buffer3.yzw;
-		if (material.lightModel == SHADINGMODELID_EMISSIVE)
-			material.customDataA = buffer4.y;
+		//if (material.lightModel == SHADINGMODELID_EMISSIVE)
+		//	material.customDataA = buffer4.y;
 	}
 }
 
 float3 DecodeGBufferAlbedo(float4 buffer1)
 {
 	return buffer1.rgb;
+}
+
+float DecodeGBufferAlpha(float4 buffer4)
+{
+	return frac(buffer4.w) / MAX_FRACTIONAL_8_BIT;
 }
 
 float3 DecodeGBufferNormal(float4 buffer2)
