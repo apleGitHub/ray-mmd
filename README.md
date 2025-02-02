@@ -1,4 +1,4 @@
-Ray-MMD
+Ray-MMD Mix Ver.
 ========
 ###### [English](https://github.com/ray-cast/ray-mmd/blob/master/README.md) &nbsp; [中文文档](https://github.com/ray-cast/ray-mmd/blob/master/README_chs.md)
 ### Physically-Based Rendering ###
