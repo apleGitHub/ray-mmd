@@ -2,9 +2,9 @@
 #include "../shader/math.fxsub"
 #include "../shader/common.fxsub"
 
-#define TEXTURE_FILTER LINEAR
-#define TEXTURE_MIP_FILTER LINEAR
-#define TEXTURE_ANISOTROPY_LEVEL 0
+#define TEXTURE_FILTER ANISOTROPIC
+#define TEXTURE_MIP_FILTER ANISOTROPIC
+#define TEXTURE_ANISOTROPY_LEVEL 16
 
 #if ALPHA_MAP_FROM == 3 || MATCAP_MAP_FROM == 3
 	texture DiffuseMap: MATERIALTEXTURE;
