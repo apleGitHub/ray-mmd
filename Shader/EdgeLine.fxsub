@@ -46,6 +46,14 @@ technique MainTecSS<string MMDPass = "object_ss";>{
 	}
 }
 
-technique MainTec0<string MMDPass = "object";>{}
+technique MainTec0<string MMDPass = "object";>{
+	pass DrawObject {
+		AlphaTestEnable = false; AlphaBlendEnable = false;
+		DepthBias = edgeLineDepthBias;
+		SlopeScaleDepthBias = edgeLineDepthSlopeScaleBias;
+		VertexShader = compile vs_3_0 MaterialVS();
+		PixelShader  = compile ps_3_0 MaterialPS();
+	}
+}
 technique ZplotTec<string MMDPass = "zplot";>{}
 technique ShadowTech<string MMDPass = "shadow";>{}

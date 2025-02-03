@@ -1,0 +1,38 @@
+float calculateLayer(sampler source, float2 coord, float2x4 layers)
+{
+    float mask[8] = {0,0,0,0,0,0,0,0};
+	int layer = tex2Dlod(LayerSamp, float4(coord, 0, 0)).r * 255;
+    if (layer % 2 == 1)
+        mask[0] = 1 - layers[0][0];
+    layer /= 2;
+    if (layer % 2 == 1)
+        mask[1] = 1 - layers[0][1];
+    layer /= 2;
+    if (layer % 2 == 1)
+        mask[2] = 1 - layers[0][2];
+    layer /= 2;
+    if (layer % 2 == 1)
+        mask[3] = 1 - layers[0][3];
+    layer /= 2;
+    if (layer % 2 == 1)
+        mask[4] = 1 - layers[1][0];
+    layer /= 2;
+    if (layer % 2 == 1)
+        mask[5] = 1 - layers[1][1];
+    layer /= 2;
+    if (layer % 2 == 1)
+        mask[6] = 1 - layers[1][2];
+    layer /= 2;
+    if (layer % 2 == 1)
+        mask[7] = 1 - layers[1][3];
+	
+	float result = max(mask[0], mask[1]);
+	result = max(result, mask[2]);
+	result = max(result, mask[3]);
+	result = max(result, mask[4]);
+	result = max(result, mask[5]);
+	result = max(result, mask[6]);
+	result = max(result, mask[7]);
+
+    return result;
+}

@@ -1,14 +1,14 @@
 #if SSR_QUALITY == 1
-#	define SSR_SAMPLER_COUNT 32
+#	define SSR_HZB_LOOP_COUNT 64
 #elif SSR_QUALITY == 2
-#	define SSR_SAMPLER_COUNT 64
+#	define SSR_HZB_LOOP_COUNT 128
 #elif SSR_QUALITY >= 3
-#	define SSR_SAMPLER_COUNT 256
+#	define SSR_HZB_LOOP_COUNT 256
 #else
-#	define SSR_SAMPLER_COUNT 32
+#	define SSR_HZB_LOOP_COUNT 64
 #endif
 
-static const float2 SSRScale = 4096 * float2(ViewportAspect, 1);
+static const float2 SSRScale = mSSRBlur * float2(ViewportAspect, 1);
 
 static const float2 SSROffsetX1 = float2(1 / SSRScale.x, 0.0);
 static const float2 SSROffsetX2 = float2(2 / SSRScale.x, 0.0);
@@ -38,70 +38,6 @@ sampler SSRLightX2SampTemp = sampler_state { texture = <SSRLightX2MapTemp>; MinF
 sampler SSRLightX3SampTemp = sampler_state { texture = <SSRLightX3MapTemp>; MinFilter = LINEAR; MagFilter = LINEAR; AddressU = CLAMP; AddressV = CLAMP; MipFilter = NONE;};
 sampler SSRLightX4SampTemp = sampler_state { texture = <SSRLightX4MapTemp>; MinFilter = LINEAR; MagFilter = LINEAR; AddressU = CLAMP; AddressV = CLAMP; MipFilter = NONE;};
 
-bool TraceScreenSpaceRay(float3 viewPosition, float3 viewReflect, float maxDistance, float jitter, out float2 hitPixel)
-{
-	float4 startPosition = float4(viewPosition, 1);
-	float4 startScreenPos = mul(startPosition, matProject);
-
-	float4 endPosition = float4(viewPosition + viewReflect * maxDistance, 1);
-	float4 endScreenPos = mul(endPosition, matProject);
-
-	startScreenPos.xy = startScreenPos.xy * float2(0.5, -0.5) + 0.5 * startScreenPos.w;
-	endScreenPos.xy = endScreenPos.xy * float2(0.5, -0.5) + 0.5 * endScreenPos.w;
-
-	float4 deltaScreenPos = endScreenPos - startScreenPos;
-
-	float stepSize = 1.0 / SSR_SAMPLER_COUNT;
-	float stepLength = jitter * stepSize + stepSize;
-
-	float bestLen = 0;
-	float bestIntervalSize = maxDistance / (SSR_SAMPLER_COUNT * 1.6) * mSSRThreshold;
-
-	for (int i = 0; i < SSR_SAMPLER_COUNT; i += 4)
-	{
-		float4 sampleLength = stepLength + stepSize * float4(0, 1, 2, 3);
-
-		float4 samplePos1 = startScreenPos + deltaScreenPos * sampleLength.x;
-		float4 samplePos2 = startScreenPos + deltaScreenPos * sampleLength.y;
-		float4 samplePos3 = startScreenPos + deltaScreenPos * sampleLength.z;
-		float4 samplePos4 = startScreenPos + deltaScreenPos * sampleLength.w;
-		float4 samplePosZ = float4(samplePos1.w, samplePos2.w, samplePos3.w, samplePos4.w);
-
-		float4 sampleDepth;
-		sampleDepth.r = tex2Dproj(Gbuffer8Map, samplePos1).r;
-		sampleDepth.g = tex2Dproj(Gbuffer8Map, samplePos2).r;
-		sampleDepth.b = tex2Dproj(Gbuffer8Map, samplePos3).r;
-		sampleDepth.a = tex2Dproj(Gbuffer8Map, samplePos4).r;
-
-		float4 depthDiff = samplePosZ - abs(sampleDepth);
-
-		bool4 hit = abs(depthDiff) < bestIntervalSize;
-		if (any(hit))
-		{
-			float hitIndex = 3;
-			hitIndex = hit[2] ? 2 : hitIndex;
-			hitIndex = hit[1] ? 1 : hitIndex;
-			hitIndex = hit[0] ? 0 : hitIndex;
-			bestLen = stepLength + stepSize * hitIndex;
-			break;
-		}
-
-		stepLength += stepSize * 4;
-	}
-
-	float4 projPos = startScreenPos + deltaScreenPos * bestLen;
-	projPos.xy /= projPos.w;
-
-	hitPixel = projPos.xy;
-
-	if (hitPixel.x < 0.0 || hitPixel.x > 1.0 || hitPixel.y < 0.0 || hitPixel.y > 1.0)
-	{
-		bestLen = 0;
-	}
-
-	return bestLen > 0 ? 1 : 0;
-}
-
 float4 SSRConeTracingPS(in float4 coord : TEXCOORD0, in float3 viewdir : TEXCOORD1) : COLOR 
 {
 	float4 MRT0 = tex2Dlod(Gbuffer5Map, float4(coord.xy, 0, 0));
@@ -128,11 +64,12 @@ float4 SSRConeTracingPS(in float4 coord : TEXCOORD0, in float3 viewdir : TEXCOOR
 	sampleDistance *= pow(1 - saturate(dot(view, material.normal)) * (1 - SSR_QUALITY * 0.1), 5 - SSR_QUALITY);
 
 	float2 hitPixel = 0;
-	bool hitTest = TraceScreenSpaceRay(viewPosition, viewReflect, sampleDistance, sampleJitter, hitPixel);
+	float3 ott = float3(mSSROffset * (1 - saturate(dot(view, material.normal))), mSSRThickness, 0);
+	bool hitTest = HZTrace(SSR_HZB_LOOP_COUNT, viewPosition, viewReflect, sampleDistance, ott, hitPixel);
 	if (!hitTest)
 		clip(-1);
 
-	float2 boundary = abs(coord.xy * 0.2 - 0.1);
+	float2 boundary = abs(coord.xy * 2 - 1);
 	float fadeDiffRcp = 1.0f / max(0.01, 1 - mSSRFadeStart);
 	float fadeOnBorder = 1.0f - saturate((boundary.x - mSSRFadeStart) * fadeDiffRcp);
 	fadeOnBorder *= 1.0f - saturate((boundary.y - mSSRFadeStart) * fadeDiffRcp);
@@ -149,7 +86,7 @@ float4 SSRGaussionBlurPS(in float2 coord : TEXCOORD0, uniform sampler source, un
 {
 	static const float weights[5] = {0.20236, 0.179044, 0.124009, 0.067234, 0.028532};
 
-	float2 start = coord - offset * 0;
+	float2 start = coord - offset * 4;
 
 	float4 color = 0;
 	color += tex2Dlod(source, float4(start, 0, 0)) * weights[4]; start += offset;
@@ -176,9 +113,11 @@ float4 SSRFinalCombiePS(in float2 coord : TEXCOORD0, in float3 viewdir : TEXCOOR
 	DecodeGbuffer(MRT0, MRT1, MRT2, MRT3, material);
 
 	float gloss = material.smoothness;
+	gloss += mSSRSmoothness;
+	gloss = saturate(gloss);
 	float gloss2 = gloss * gloss;
 
-	float weight = frac(min(gloss2, 1.0) * 3);
+	float weight = frac(min(gloss2, 0.9999) * 3);
 
 	float4 refl0 = tex2Dlod(SSRLightX1Samp, float4(coord, 0, 0));
 	float4 refl1 = tex2Dlod(SSRLightX2Samp, float4(coord, 0, 0));
@@ -198,7 +137,12 @@ float4 SSRFinalCombiePS(in float2 coord : TEXCOORD0, in float3 viewdir : TEXCOOR
 	float3 N = material.normal;
 	float3 V = normalize(viewdir);
 	float3 f0 = material.specular;
-	float3 fresnel = EnvironmentSpecularUnreal4(abs(dot(N, V)), gloss, f0);
+	float3 fresnelColor = EnvironmentSpecularUnreal4(abs(dot(N, V)), gloss, f0);
 
-	return float4(color.rgb * fresnel, color.a * luminance(fresnel));
+	float brightness = mSSRBrightness;
+	float fresnel = lerp(0, luminance(fresnelColor), saturate(mSSRFresnel * 2));
+	fresnel = lerp(fresnel, 1, saturate(mSSRFresnel * 2 - 1));
+
+	return float4(color.rgb * fresnelColor * brightness, color.a * fresnel) 
+	* calculateLayer(LayerSamp, coord, mSSRLayers);
 }
