@@ -23,6 +23,7 @@ void ShadingMaterial(MaterialParam material, float3 V, float3 L, float2 coord, o
 #if SUN_LIGHT_ENABLE == 2
  	lightColor *= ComputeSunIntensity(dot(float3(0,1,0), -SunDirection));
 #endif
+	lightColor *= calculateLayer(LayerSamp, coord, mSunLayers);
 
 #if TOON_ENABLE
 	float2x3 energy = SurfaceEnergy(material, material.normal, L, V, shadow);
@@ -198,7 +199,7 @@ float4 ShadingTransparentPS(
 	{
 		float3 emissive0 = DecodeGBufferEmissive(MRT3, MRT4);
 		float emissive0alpha = DecodeGBufferAlpha(MRT4);
-		float3 emissive1 = material.customDataB * material.emissiveIntensity;
+		float3 emissive1 = material.customDataB * material.customDataA * any(material.lightModel == SHADINGMODELID_EMISSIVE);
 		
 		lighting += (emissive0 * emissive0alpha * ( 1.0 - material.alpha ) + emissive1 * material.alpha) * lerp(1.0, float3(0.6,0.45,0.25), pow(1.0 - saturate(dot(material.normal, V)), 2.5));
 	}
