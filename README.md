@@ -13,3 +13,5 @@ For more detail on ray-mmd itself, view the original repo. I'm just changing som
 [Ray-MMD SSR Material/Shader Edit](https://bowlroll.net/file/296096)
 
 [RayMMD DD Tonemapping Library 1.1](https://www.deviantart.com/dendewa/art/RayMMD-DD-Tonemapping-Library-1-1-958528359)
+
+[RayMMD / Raycast Alpha Fix](https://www.deviantart.com/dendewa/art/RayMMD-Raycast-Alpha-Fix-DOWNLOAD-848877809)
