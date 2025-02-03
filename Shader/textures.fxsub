@@ -97,6 +97,22 @@ sampler LightAlphaMapSamp = sampler_state {
 	AddressU = CLAMP; AddressV = CLAMP;
 };
 #endif
+shared texture LayerMap: OFFSCREENRENDERTARGET<
+	string Description = "Layer";
+	float2 ViewportRatio = {1.0, 1.0};
+	string Format = "L8";
+	float4 ClearColor = { 0, 0, 0, 0 };
+	float ClearDepth = 1.0;
+	string DefaultEffect = 
+		"*controller*.pmx=hide;"
+		"* = ./Layer/Layer_0.fx;"
+		;
+>;
+sampler LayerSamp = sampler_state {
+	texture = <LayerMap>;
+	MinFilter = NONE; MagFilter = NONE; MipFilter = NONE;
+	AddressU = CLAMP; AddressV = CLAMP;
+};
 #if IBL_QUALITY
 texture EnvLightMap: OFFSCREENRENDERTARGET<
 	string Description = "Image-based-lighting map for ray";
@@ -206,7 +222,7 @@ sampler SSAOMapSamp = sampler_state {
 };
 #endif
 #if SUN_LIGHT_ENABLE && SUN_SHADOW_QUALITY
-shared texture PSSM1 : OFFSCREENRENDERTARGET<
+shared texture CSM : OFFSCREENRENDERTARGET<
 	string Description = "Cascade shadow map for ray";
 	int2 Dimensions = { SHADOW_MAP_SIZE, SHADOW_MAP_SIZE };
 	string Format = "R32F";
@@ -218,11 +234,11 @@ shared texture PSSM1 : OFFSCREENRENDERTARGET<
 		"*controller*.pmx=hide;"
 		"*editor*.pmx=hide;"
 		"Volumetric*.pmx=hide;"
-		"*.pmx=shadow/PSSM1.fx;"
-		"*.pmd=shadow/PSSM1.fx;"
+		"*.pmx=shadow/CSM.fx;"
+		"*.pmd=shadow/CSM.fx;"
 		"*.x=hide;";
 >;
-shared texture PSSM2 : OFFSCREENRENDERTARGET<
+shared texture CSM1 : OFFSCREENRENDERTARGET<
 	string Description = "Cascade shadow map for ray";
 	int2 Dimensions = { SHADOW_MAP_SIZE, SHADOW_MAP_SIZE };
 	string Format = "R32F";
@@ -234,11 +250,11 @@ shared texture PSSM2 : OFFSCREENRENDERTARGET<
 		"*controller*.pmx=hide;"
 		"*editor*.pmx=hide;"
 		"Volumetric*.pmx=hide;"
-		"*.pmx=shadow/PSSM2.fx;"
-		"*.pmd=shadow/PSSM2.fx;"
+		"*.pmx=shadow/CSM1.fx;"
+		"*.pmd=shadow/CSM1.fx;"
 		"*.x=hide;";
 >;
-shared texture PSSM3 : OFFSCREENRENDERTARGET<
+shared texture CSM2 : OFFSCREENRENDERTARGET<
 	string Description = "Cascade shadow map for ray";
 	int2 Dimensions = { SHADOW_MAP_SIZE, SHADOW_MAP_SIZE };
 	string Format = "R32F";
@@ -250,11 +266,11 @@ shared texture PSSM3 : OFFSCREENRENDERTARGET<
 		"*controller*.pmx=hide;"
 		"*editor*.pmx=hide;"
 		"Volumetric*.pmx=hide;"
-		"*.pmx=shadow/PSSM3.fx;"
-		"*.pmd=shadow/PSSM3.fx;"
+		"*.pmx=shadow/CSM2.fx;"
+		"*.pmd=shadow/CSM2.fx;"
 		"*.x=hide;";
 >;
-shared texture PSSM4 : OFFSCREENRENDERTARGET<
+shared texture CSM3 : OFFSCREENRENDERTARGET<
 	string Description = "Cascade shadow map for ray";
 	int2 Dimensions = { SHADOW_MAP_SIZE, SHADOW_MAP_SIZE };
 	string Format = "R32F";
@@ -266,28 +282,28 @@ shared texture PSSM4 : OFFSCREENRENDERTARGET<
 		"*controller*.pmx=hide;"
 		"*editor*.pmx=hide;"
 		"Volumetric*.pmx=hide;"
-		"*.pmx=shadow/PSSM4.fx;"
-		"*.pmd=shadow/PSSM4.fx;"
+		"*.pmx=shadow/CSM3.fx;"
+		"*.pmd=shadow/CSM3.fx;"
 		"*.x=hide;";
 >;
-sampler PSSM1Samp = sampler_state {
-	texture = <PSSM1>;
-	MinFilter = LINEAR; MagFilter = LINEAR; MipFilter = NONE;
+sampler CSMSamp = sampler_state {
+	texture = <CSM>;
+	MinFilter = POINT; MagFilter = POINT; MipFilter = NONE;
 	AddressU = CLAMP; AddressV = CLAMP;
 };
-sampler PSSM2Samp = sampler_state {
-	texture = <PSSM2>;
-	MinFilter = LINEAR; MagFilter = LINEAR; MipFilter = NONE;
+sampler CSM1Samp = sampler_state {
+	texture = <CSM1>;
+	MinFilter = POINT; MagFilter = POINT; MipFilter = NONE;
 	AddressU = CLAMP; AddressV = CLAMP;
 };
-sampler PSSM3Samp = sampler_state {
-	texture = <PSSM3>;
-	MinFilter = LINEAR; MagFilter = LINEAR; MipFilter = NONE;
+sampler CSM2Samp = sampler_state {
+	texture = <CSM2>;
+	MinFilter = POINT; MagFilter = POINT; MipFilter = NONE;
 	AddressU = CLAMP; AddressV = CLAMP;
 };
-sampler PSSM4Samp = sampler_state {
-	texture = <PSSM4>;
-	MinFilter = LINEAR; MagFilter = LINEAR; MipFilter = NONE;
+sampler CSM3Samp = sampler_state {
+	texture = <CSM3>;
+	MinFilter = POINT; MagFilter = POINT; MipFilter = NONE;
 	AddressU = CLAMP; AddressV = CLAMP;
 };
 texture ShadowMap : RENDERCOLORTARGET<
