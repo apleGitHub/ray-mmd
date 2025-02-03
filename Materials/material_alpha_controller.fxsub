@@ -1,0 +1,3 @@
+float mCommonMasking : CONTROLOBJECT<string name=CONTROLLER_NAME; string item = "CommonMasking";>;
+float mLeafMasking : CONTROLOBJECT<string name=CONTROLLER_NAME; string item = "LeafMasking";>;;
+float mHairMasking : CONTROLOBJECT<string name=CONTROLLER_NAME; string item = "HairMasking";>;
