@@ -6,10 +6,4 @@ static const float2 lightIntensityLimits = float2(1.0, 10.0);
 
 #define SHADOW_MAP_FROM 1
 
-static const float2 shadowHardness = float2(0.15, 0.5);
-
-// NOTICE : DO NOT MODIFY IT IF YOU CANT'T UNDERSTAND WHAT IT IS
-static const float sampleRadius = 2;
-static const float sampleKernel[5] = {0.1784, 0.210431, 0.222338, 0.210431, 0.1784};
-
 #include "../directional_lighting.fxsub"

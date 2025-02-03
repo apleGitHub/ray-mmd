@@ -1,0 +1,132 @@
+#include "../../ray.conf"
+#include "../../ray_advanced.conf"
+#include "../../shader/common.fxsub"
+#include "../../shader/ShadowMapCascaded.fxsub"
+#include "../../shader/CascadeShadow.fxsub"
+
+#if SHADOW_QUALITY == 1
+#	define SHADOW_MAP_SIZE 1024
+#elif SHADOW_QUALITY == 2
+#	define SHADOW_MAP_SIZE 2048
+#elif SHADOW_QUALITY == 3
+#	define SHADOW_MAP_SIZE 4096
+#elif SHADOW_QUALITY == 4
+#	define SHADOW_MAP_SIZE 8192
+#else
+#	define SHADOW_MAP_SIZE 2048
+#endif
+
+float mRangeP : CONTROLOBJECT<string name="(OffscreenOwner)"; string item="Range+";>;
+float mRangeM : CONTROLOBJECT<string name="(OffscreenOwner)"; string item="Range-";>;
+
+float3 mPosition : CONTROLOBJECT<string name="(OffscreenOwner)"; string item="Position";>;
+float3 mDirection : CONTROLOBJECT<string name="(OffscreenOwner)"; string item="Direction";>;
+
+static const float LightRange = lerp(lerp(1000, 2000, mRangeP), 0, mRangeM);
+
+static const float3 LightPosition = mPosition;
+static const float3 LightDirection = normalize(mDirection - mPosition);
+
+static float4 frustumInfo = CreateFrustumFromProjInverse();
+static FrustumClipPlanes planes = CreateFrustumClipPlanes(mCascadeShadowZNear, mCascadeShadowZFar, mCascadeShadowLambda);
+
+#if CASTER_ALPHA_MAP_ENABLE
+texture DiffuseMap: MATERIALTEXTURE;
+sampler DiffuseMapSamp = sampler_state
+{
+	texture = <DiffuseMap>;
+	MINFILTER = POINT; MAGFILTER = POINT; MIPFILTER = POINT;
+	ADDRESSU = WRAP; ADDRESSV = WRAP;
+};
+#endif
+
+float3 ApplyShadowBias(float3 positionWS, float3 normalWS, float3 lightDirection, float depthBias, float normalBias)
+{
+    float invNdotL = 1.0 - saturate(dot(lightDirection, normalWS));
+    float scale = invNdotL * normalBias;
+
+    // normal bias is negative since we want to apply an inset normal offset
+    positionWS = lightDirection * depthBias + positionWS;
+    positionWS = normalWS * scale.xxx + positionWS;
+    return positionWS;
+}
+
+void CascadeShadowMapVS(
+	in float4 positionOS : POSITION,
+	in float3 normalOS : NORMAL,
+	in float2 texcoord : TEXCOORD0,
+	uniform int layer,
+	out float2 oTexcoord0 : TEXCOORD0,
+	out float4 oTexcoord1 : TEXCOORD1,
+	out float4 oPosition : POSITION)
+{
+	float znear = planes.znears[layer];
+    float zfar = planes.zfars[layer];
+    FrustumData frustum = CreateFrustumData(znear, zfar, frustumInfo);
+
+    float3 nc = (frustum.rtn + frustum.lbn) / 2.0;
+    float3 fc = (frustum.rtf + frustum.lbf) / 2.0;
+
+    float3 axis = fc - nc;
+    float3 v0 = nc - frustum.rtf;
+    float3 v1 = nc - frustum.rtn;
+    float t = (dot(v0, v0) - dot(v1, v1)) / (2 * dot(axis, frustum.rtf - frustum.rtn));
+
+    float3 center = nc + t * axis;
+
+    float radius = length(frustum.rbn - center);
+
+    center = mul(float4(center, 1), matViewInverse).xyz;
+
+    float3 lightDirectionWS = -LightDirection;
+
+    float4x4 vmat = CreateLightViewMatrixWithCenter(LightDirection, lightDirectionWS, radius + mCascadeShadowZNear, center);
+    float4x4 pmat = CreateOrthographicMatrix(-radius, radius, -radius, radius, mCascadeShadowZNear, mCascadeShadowZNear + 2 * radius);
+
+    float3 positionWS = mul(positionOS, matWorld).xyz;
+	float3 normalWS = mul(normalOS, (float3x3)matWorld);
+
+	float frustumSize = 2.0f / pmat[0][0];
+	float texelSize = frustumSize / SHADOW_MAP_SIZE;
+
+	float depthBias = -DepthBias * texelSize;
+    float normalBias = -NormalBias * texelSize;
+
+	positionWS = ApplyShadowBias(positionWS, normalWS, lightDirectionWS, depthBias, normalBias);
+    float3 positionVS = mul(float4(positionWS, 1), vmat).xyz;
+	positionVS.z = max(mCascadeShadowZNear, positionVS.z);
+    float4 positionCS = mul(float4(positionVS, 1), pmat);
+
+    oPosition = positionCS;
+
+	oTexcoord0 = texcoord;
+    oTexcoord1.z = positionVS.z;
+}
+
+float4 CascadeShadowMapPS(
+	in float4 coord0 : TEXCOORD0,
+	in float4 coord1 : TEXCOORD1) : COLOR
+{
+#if CASTER_ALPHA_ENABLE
+	float alpha = MaterialDiffuse.a;
+#if CASTER_ALPHA_MAP_ENABLE
+	if (use_texture) alpha *= tex2D(DiffuseMapSamp, coord0.xy).a;
+#endif
+	clip(alpha - CasterAlphaThreshold);
+#endif
+	return coord1.z;
+}
+
+technique DepthTech<string MMDPass = "object_ss";
+>{
+	pass CascadeShadowMap {
+		AlphaBlendEnable = false; AlphaTestEnable = false;
+		VertexShader = compile vs_3_0 CascadeShadowMapVS(CSM_LAYERED_NUM);
+		PixelShader  = compile ps_3_0 CascadeShadowMapPS();
+	}
+}
+
+technique DepthTec<string MMDPass = "object";>{}
+technique EdgeTec<string MMDPass = "edge";>{}
+technique ShadowTec<string MMDPass = "shadow";>{}
+technique ZplotTec<string MMDPass = "zplot";>{}

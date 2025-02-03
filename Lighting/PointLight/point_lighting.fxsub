@@ -1,6 +1,9 @@
+#include "../../lighting_common.fxsub"
+
 #include "../../../ray.conf"
 #include "../../../ray_advanced.conf"
 #include "../../../shader/math.fxsub"
+#include "../../../shader/Layer.fxsub"
 #include "../../../shader/common.fxsub"
 #include "../../../shader/gbuffer.fxsub"
 #include "../../../shader/gbuffer_sampler.fxsub"
@@ -42,19 +45,19 @@ static const float3 viewLightPosition = mul(float4(LightPosition, 1), matView).x
 #if SHADOW_MAP_FROM > 0
 #if SHADOW_MAP_QUALITY == 0
 #   define SHADOW_MAP_WIDTH 256
-#   define SHADOW_MAP_HEIGHT 512
+#   define SHADOW_MAP_HEIGHT 384
 #elif SHADOW_MAP_QUALITY == 1
 #   define SHADOW_MAP_WIDTH 512
-#   define SHADOW_MAP_HEIGHT 1024
-#elif SHADOW_MAP_QUALITY == 2
+#   define SHADOW_MAP_HEIGHT 768
+#elif SHADOW_MAP_QUALITY >= 2
 #   define SHADOW_MAP_WIDTH 1024
-#   define SHADOW_MAP_HEIGHT 2048
+#   define SHADOW_MAP_HEIGHT 1536
 #elif SHADOW_MAP_QUALITY >= 3
 #   define SHADOW_MAP_WIDTH 2048
-#   define SHADOW_MAP_HEIGHT 4096
+#   define SHADOW_MAP_HEIGHT 3072
 #else
 #   define SHADOW_MAP_WIDTH 256
-#   define SHADOW_MAP_HEIGHT 512
+#   define SHADOW_MAP_HEIGHT 384
 #endif
 
 texture ShadowMap: OFFSCREENRENDERTARGET <
@@ -81,16 +84,94 @@ sampler ShadowMapSamp = sampler_state {
 static float2 ShadowMapOffset  = 0.5 / float2(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
 static float2 ShadowMapOffset2 = 1.0 / float2(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
 
+float4x4 CreateLightViewMatrix(float3 forward, float3 up, float3 right, float3 LightPosition)
+{
+	float3x3 rotation = {right.x, up.x, forward.x,
+						 right.y, up.y, forward.y,
+						 right.z, up.z, forward.z };
+
+	return float4x4(rotation[0], 0,
+					rotation[1], 0,
+					rotation[2], 0,
+					mul(-LightPosition, rotation), 1);
+}
+
+static float4x4 matLightProject = CreatePerspectiveProject(radians(45), 1, mPointLightNear, mPointLightFar);
+static float4x4 matLightViewXP = CreateLightViewMatrix(float3(1,0,0), float3(0,1,0), float3(0,0,-1), LightPosition);
+static float4x4 matLightViewXN = CreateLightViewMatrix(float3(-1,0,0), float3(0,1,0), float3(0,0,1), LightPosition);
+static float4x4 matLightViewYP = CreateLightViewMatrix(float3(0,1,0), float3(0,0,-1), float3(1,0,0), LightPosition);
+static float4x4 matLightViewYN = CreateLightViewMatrix(float3(0,-1,0), float3(0,0,1), float3(1,0,0), LightPosition);
+static float4x4 matLightViewZP = CreateLightViewMatrix(float3(0,0,1), float3(0,1,0), float3(1,0,0), LightPosition);
+static float4x4 matLightViewZN = CreateLightViewMatrix(float3(0,0,-1), float3(0,-1,0), float3(1,0,0), LightPosition);
+
+
+
+int CubeMapFaceID(float3 dir)
+{
+    int faceID;
+
+    if (abs(dir.z) >= abs(dir.x) && abs(dir.z) >= abs(dir.y))
+    {
+        faceID = (dir.z < 0.0) ? 5 : 4;
+    }
+    else if (abs(dir.y) >= abs(dir.x))
+    {
+        faceID = (dir.y < 0.0) ? 3 : 2;
+    }
+    else
+    {
+        faceID = (dir.x < 0.0) ? 1 : 0;
+    }
+
+    return faceID;
+}
+
 float ShadingShadow(MaterialParam material, float3 viewPosition)
 {
 	float3 P = mul(float4(viewPosition, 1), matViewInverse).xyz;
 	float3 L = P - LightPosition;
 
-	float linearDepth = length(L);
-	float depth = (mPointLightFar - (mPointLightFar / linearDepth) * mPointLightNear) / (mPointLightFar - mPointLightNear);
+	int face = CubeMapFaceID(L);
+
+	float4 sts[] = {
+		float4(0.5, 1.0/3, 0, 0),
+		float4(0.5, 1.0/3, 0.5, 0),
+		float4(0.5, 1.0/3, 0, 1.0/3),
+		float4(0.5, 1.0/3, 0.5, 1.0/3),
+		float4(0.5, 1.0/3, 0, 2.0/3),
+		float4(0.5, 1.0/3, 0.5, 2.0/3)
+	};
+
+	static float4x4 viewMatrices[] = {
+		matLightViewXP,
+		matLightViewXN,
+		matLightViewYP,
+		matLightViewYN,
+		matLightViewZP,
+		matLightViewZN
+	};
+
+	float4 rects[] = {
+		float4(0.0, 0, 0.5, 1.0/3),
+		float4(0.5, 0, 0.5, 1.0/3),
+		float4(0.0, 1.0/3, 0.5, 1.0/3),
+		float4(0.5, 1.0/3, 0.5, 1.0/3),
+		float4(0.0, 2.0/3, 0.5, 1.0/3),
+		float4(0.5, 2.0/3, 0.5, 1.0/3),
+	};
+	float4 rect = rects[face];
+
+	float4 st = sts[face];
+
+	float3 P_VS = mul(float4(P, 1), viewMatrices[face]).xyz;
+	float4 P_CS = mul(float4(P_VS, 1), matLightProject);
+	float3 P_NDC = P_CS.xyz / P_CS.w;
+	float2 P_Screen = P_NDC.xy * float2(0.5, -0.5) + 0.5;
+	float2 coord = P_Screen * st.xy + st.zw;
+
+	float depth = P_NDC.z;
 
 	float2 shadow = 0.0;
-	float2 coord = CalcDualShadowCoord(L / linearDepth, SHADOW_MAP_HEIGHT);
 
 	[unroll]
 	for (int x = -sampleRadius; x <= sampleRadius; x++) 
@@ -99,6 +180,8 @@ float ShadingShadow(MaterialParam material, float3 viewPosition)
 		for (int y = -sampleRadius; y <= sampleRadius; y++)
 		{
 			float2 pos = coord + float2(x, y) * ShadowMapOffset2;
+			pos.x = clamp(pos.x, rect.x + ShadowMapOffset.x * 3, rect.x + rect.z - ShadowMapOffset.x * 3);
+			pos.y = clamp(pos.y, rect.y + ShadowMapOffset.y * 3, rect.y + rect.w - ShadowMapOffset.y * 3);
 			shadow += tex2Dlod(ShadowMapSamp, float4(pos, 0, 0)).rg * sampleKernel[sampleRadius + x] * sampleKernel[sampleRadius + y];
 		}
 	}
@@ -146,6 +229,16 @@ void GetGbufferParams(float4 texcoord, out MaterialParam material, out MaterialP
 	DecodeGbuffer(MRT1, MRT2, MRT3, MRT4, material);
 }
 
+void UseLayer(float4 texcoord, inout float3 diffuse, inout float3 specular, inout float3 diffuseAlpha, inout float3 specularAlpha)
+{
+	float2 coord = texcoord.xy / texcoord.w;
+	float mul = calculateLayer(LayerSamp, coord, mLayers);
+	diffuse *= mul;
+	specular *= mul;
+	diffuseAlpha *= mul;
+	specularAlpha *= mul;
+}
+
 void LightSourceVS(
 	in float4 Position : POSITION,
 	in float3 Normal : NORMAL,
@@ -189,6 +282,8 @@ void LightSourcePS(
 	float3 diffuseAlpha, specularAlpha = 0;
 	ShadingMaterial(materialAlpha, P2, V, shadow, diffuseAlpha, specularAlpha);
 
+	UseLayer(texcoord, diffuse, specular, diffuseAlpha, specularAlpha);
+
 	oColor0 = float4(diffuse, 0);
 	oColor1 = float4(specular, 0);
 	oColor2 = float4(diffuseAlpha * materialAlpha.albedo + specularAlpha, 0);
@@ -215,6 +310,8 @@ void LightSourceShadowlessPS(
 
 	float3 diffuseAlpha, specularAlpha = 0;
 	ShadingMaterial(materialAlpha, P2, V, 1, diffuseAlpha, specularAlpha);
+
+	UseLayer(texcoord, diffuse, specular, diffuseAlpha, specularAlpha);
 
 	oColor0 = float4(diffuse, 0);
 	oColor1 = float4(specular, 0);

@@ -1,6 +1,9 @@
+#include "../../lighting_common.fxsub"
+
 #include "../../../ray.conf"
 #include "../../../ray_advanced.conf"
 #include "../../../shader/math.fxsub"
+#include "../../../shader/Layer.fxsub"
 #include "../../../shader/common.fxsub"
 #include "../../../shader/gbuffer.fxsub"
 #include "../../../shader/gbuffer_sampler.fxsub"
@@ -8,25 +11,21 @@
 
 #if SHADOW_MAP_FROM >= 1
 #	include "../../../shader/ShadowMapCascaded.fxsub"
+#	include "../../../shader/CascadeShadow.fxsub"
 #endif
 
 float mR : CONTROLOBJECT<string name = "(self)"; string item = "R+";>;
 float mG : CONTROLOBJECT<string name = "(self)"; string item = "G+";>;
 float mB : CONTROLOBJECT<string name = "(self)"; string item = "B+";>;
-float mRangeP : CONTROLOBJECT<string name = "(self)"; string item = "Range+";>;
-float mRangeM : CONTROLOBJECT<string name = "(self)"; string item = "Range-";>;
 float mBlink : CONTROLOBJECT<string name = "(self)"; string item = "Blink";>;
 float mIntensityP : CONTROLOBJECT<string name = "(self)"; string item = "Intensity+";>;
 float mIntensityM : CONTROLOBJECT<string name = "(self)"; string item = "Intensity-";>;
-float mHardnessP : CONTROLOBJECT<string name = "(self)"; string item = "Hardness";>;
 float mMultiLightP : CONTROLOBJECT<string name = "ray_controller.pmx"; string item = "MultiLight+";>;
 float mMultiLightM : CONTROLOBJECT<string name = "ray_controller.pmx"; string item = "MultiLight-";>;
 
 float3 mPosition : CONTROLOBJECT<string name = "(self)"; string item = "Position";>;
 float3 mDirection : CONTROLOBJECT<string name = "(self)"; string item = "Direction";>;
 
-static const float LightRange = lerp(lerp(1000, 2000, mRangeP), 0, mRangeM);
-static const float LightHardness = lerp(shadowHardness.x, shadowHardness.y, mHardnessP);
 static const float LightBlink = saturate(1 - SmoothTriangleWave(time * mBlink * 10));
 static const float LightIntensity = lerp(lerp(lightIntensityLimits.x, lightIntensityLimits.y, mIntensityP), 0, mIntensityM);
 static const float LightIntensity2 = lerp(lerp(mLightIntensityMin, mLightIntensityMax, mMultiLightP), 0, mMultiLightM);
@@ -50,7 +49,7 @@ static const float3 viewLightDirection = normalize(mul(-LightDirection, (float3x
 #	define SHADOW_MAP_SIZE 2048
 #endif
 
-texture PSSM1 : OFFSCREENRENDERTARGET<
+texture CSM : OFFSCREENRENDERTARGET<
 	string Description = "Shadow Rendering for DirectionalLight";
 	int2 Dimensions = {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE};
 	string Format = "G32R32F";
@@ -61,11 +60,11 @@ texture PSSM1 : OFFSCREENRENDERTARGET<
 		"*fog.pmx=hide;"
 		"*controller.pmx=hide;"
 		"*editor*.pmx=hide;"
-		"*.pmx = ../PSSM1.fx;"
-		"*.pmd = ../PSSM1.fx;"
+		"*.pmx = ../CSM.fx;"
+		"*.pmd = ../CSM.fx;"
 		"* = hide";
 >;
-texture PSSM2 : OFFSCREENRENDERTARGET<
+texture CSM1 : OFFSCREENRENDERTARGET<
 	string Description = "Shadow Rendering for DirectionalLight";
 	int2 Dimensions = {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE};
 	string Format = "G32R32F";
@@ -76,11 +75,11 @@ texture PSSM2 : OFFSCREENRENDERTARGET<
 		"*fog.pmx=hide;"
 		"*controller.pmx=hide;"
 		"*editor*.pmx=hide;"
-		"*.pmx = ../PSSM2.fx;"
-		"*.pmd = ../PSSM2.fx;"
+		"*.pmx = ../CSM1.fx;"
+		"*.pmd = ../CSM1.fx;"
 		"* = hide";
 >;
-texture PSSM3 : OFFSCREENRENDERTARGET<
+texture CSM2 : OFFSCREENRENDERTARGET<
 	string Description = "Shadow Rendering for DirectionalLight";
 	int2 Dimensions = {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE};
 	string Format = "G32R32F";
@@ -91,11 +90,11 @@ texture PSSM3 : OFFSCREENRENDERTARGET<
 		"*fog.pmx=hide;"
 		"*controller.pmx=hide;"
 		"*editor*.pmx=hide;"
-		"*.pmx = ../PSSM3.fx;"
-		"*.pmd = ../PSSM3.fx;"
+		"*.pmx = ../CSM2.fx;"
+		"*.pmd = ../CSM2.fx;"
 		"* = hide";
 >;
-texture PSSM4 : OFFSCREENRENDERTARGET<
+texture CSM3 : OFFSCREENRENDERTARGET<
 	string Description = "Shadow Rendering for DirectionalLight";
 	int2 Dimensions = {SHADOW_MAP_SIZE, SHADOW_MAP_SIZE};
 	string Format = "G32R32F";
@@ -106,83 +105,118 @@ texture PSSM4 : OFFSCREENRENDERTARGET<
 		"*fog.pmx=hide;"
 		"*controller.pmx=hide;"
 		"*editor*.pmx=hide;"
-		"*.pmx = ../PSSM4.fx;"
-		"*.pmd = ../PSSM4.fx;"
+		"*.pmx = ../CSM3.fx;"
+		"*.pmd = ../CSM3.fx;"
 		"* = hide";
 >;
-sampler PSSM1Samp = sampler_state { texture = <PSSM1>; MinFilter = LINEAR; MagFilter = LINEAR; MipFilter = NONE; AddressU = CLAMP; AddressV = CLAMP; };
-sampler PSSM2Samp = sampler_state { texture = <PSSM2>; MinFilter = LINEAR; MagFilter = LINEAR; MipFilter = NONE; AddressU = CLAMP; AddressV = CLAMP; };
-sampler PSSM3Samp = sampler_state { texture = <PSSM3>; MinFilter = LINEAR; MagFilter = LINEAR; MipFilter = NONE; AddressU = CLAMP; AddressV = CLAMP; };
-sampler PSSM4Samp = sampler_state { texture = <PSSM4>; MinFilter = LINEAR; MagFilter = LINEAR; MipFilter = NONE; AddressU = CLAMP; AddressV = CLAMP; };
+sampler CSMSamp = sampler_state { texture = <CSM>; MinFilter = POINT; MagFilter = POINT; MipFilter = NONE; AddressU = CLAMP; AddressV = CLAMP; };
+sampler CSM1Samp = sampler_state { texture = <CSM1>; MinFilter = POINT; MagFilter = POINT; MipFilter = NONE; AddressU = CLAMP; AddressV = CLAMP; };
+sampler CSM2Samp = sampler_state { texture = <CSM2>; MinFilter = POINT; MagFilter = POINT; MipFilter = NONE; AddressU = CLAMP; AddressV = CLAMP; };
+sampler CSM3Samp = sampler_state { texture = <CSM3>; MinFilter = POINT; MagFilter = POINT; MipFilter = NONE; AddressU = CLAMP; AddressV = CLAMP; };
 
-static const float2 ShadowMapOffset  = 0.5 / SHADOW_MAP_SIZE;
-static const float2 ShadowMapOffset2 = 1.0 / SHADOW_MAP_SIZE;
+static float4 frustumInfo = CreateFrustumFromProjInverse();
+static FrustumClipPlanes planes = CreateFrustumClipPlanes(mCascadeShadowZNear, mCascadeShadowZFar, mCascadeShadowLambda);
 
-static const float4x4 matLightProject = CreateOrthoProject(2, 2, mPSSMDepthZMin, mPSSMDepthZMax);
-static const float4x4 matLightView = CreateLightViewMatrix(LightDirection, -LightDirection, LightRange);
-static const float4x4 matLightViewProject = mul(matLightView, matLightProject);
-static const float4x4 matLightViewFromCameraView = mul(matViewInverse, matLightView);
-static const float4x4 matLightProjectFromCameraView = mul(matViewInverse, matLightViewProject);
-static const float4x4 lightCropParams = CreateLightCropParams(matLightViewFromCameraView, SHADOW_MAP_SIZE);
-
-float2 ShadowPCF(sampler source, float2 coord, float receiverDepth) 
+float SampleCompare(sampler source, float2 shadowCoord, float depth)
 {
-	float2 shadow = 0.0;
+	float s = tex2Dlod(source, float4(shadowCoord, 0, 0)).r;
+	return s < 1e-5 ? 1 : (s > depth ? 1 : 0);
+}
 
-	[unroll]
-	for (int x = -sampleRadius; x <= sampleRadius; x++) 
-	{
-		[unroll]
-		for (int y = -sampleRadius; y <= sampleRadius; y++)
-		{
-			float2 pos = coord + float2(x, y) * ShadowMapOffset2;
-			shadow += tex2Dlod(source, float4(pos, 0, 0)).rg * sampleKernel[sampleRadius + x] * sampleKernel[sampleRadius + y];
-		}
-	}
+float SampleShadowmapFiltered(sampler source, float2 shadowCoord, float depth, float4 shadowmapSize)
+{
+	float4 attenuation4;
+	float invShadowAtlasWidth = shadowmapSize.x;
+	float invShadowAtlasHeight = shadowmapSize.y;
+	float invHalfShadowAtlasWidth = 0.5f * invShadowAtlasWidth;
+    float invHalfShadowAtlasHeight = 0.5f * invShadowAtlasHeight;
+	float2 offset = float2(invHalfShadowAtlasWidth, invHalfShadowAtlasHeight);
+    attenuation4.x = SampleCompare(source, shadowCoord.xy + offset * float2(-1, -1), depth);
+    attenuation4.y = SampleCompare(source, shadowCoord.xy + offset * float2(+1, -1), depth);
+    attenuation4.z = SampleCompare(source, shadowCoord.xy + offset * float2(-1, +1), depth);
+    attenuation4.w = SampleCompare(source, shadowCoord.xy + offset * float2(+1, +1), depth);
+    float attenuation = dot(attenuation4, 0.25);
 
-	return shadow;
+	return attenuation;
 }
 
 float ShadingShadow(MaterialParam material, float3 viewPosition)
 {
-	float4 proj = mul(float4(viewPosition, 1), matLightProjectFromCameraView);
+	float shadow = 1;
 
-	float4 lightPPos01 = proj.xyxy * float4(lightCropParams[0].xy, lightCropParams[1].xy) + float4(lightCropParams[0].zw, lightCropParams[1].zw);
-	float4 lightPPos23 = proj.xyxy * float4(lightCropParams[2].xy, lightCropParams[3].xy) + float4(lightCropParams[2].zw, lightCropParams[3].zw);
+	float3 positionWS = mul(float4(viewPosition, 1), matViewInverse).xyz;
 
-	float4 lightCoord01 = PosToCoord(lightPPos01);
-	float4 lightCoord23 = PosToCoord(lightPPos23);
+	int layer = -1;
+	float4x4 vmat = 0;
+	float4x4 pmat = 0;
+	[unroll]
+	for (int i = 0; i < 4; i++) {
+		float znear = planes.znears[i];
+		float zfar = planes.zfars[i];
+		FrustumData frustum = CreateFrustumData(znear, zfar, frustumInfo);
 
-	float4 lightPPos0 = float4(lightCoord01.xy, min2(float2(1, 1) - abs(lightPPos01.xy)), 0);
-	float4 lightPPos1 = float4(lightCoord01.zw, min2(float2(1, 1) - abs(lightPPos01.zw)), 1);
-	float4 lightPPos2 = float4(lightCoord23.xy, min2(float2(1, 1) - abs(lightPPos23.xy)), 2);
-	float4 lightPPos3 = float4(lightCoord23.zw, min2(float2(1, 1) - abs(lightPPos23.zw)), 3);
+		float3 nc = (frustum.rtn + frustum.lbn) / 2.0;
+		float3 fc = (frustum.rtf + frustum.lbf) / 2.0;
 
-	float4 coord = lightPPos3;
-	if (lightPPos2.z > 0) { coord = lightPPos2; }
-	if (lightPPos1.z > 0) { coord = lightPPos1; }
-	if (lightPPos0.z > 0) { coord = lightPPos0; }
-	clip(coord.z);
+		float3 axis = fc - nc;
+		float3 v0 = nc - frustum.rtf;
+		float3 v1 = nc - frustum.rtn;
+		float t = (dot(v0, v0) - dot(v1, v1)) / (2 * dot(axis, frustum.rtf - frustum.rtn));
 
-	float receiverDepth = dot(float4(viewPosition, 1), matLightViewFromCameraView._13_23_33_43);
-	float depthSlope = ShadowSlopeScaledBias(proj.z / mPSSMDepthZMax) * mPSSMDepthZMax;
-	receiverDepth -= (material.linearDepth + depthSlope) * 0.0035 + max(0, material.linearDepth - 100) * 0.007;
+		float3 center = nc + t * axis;
 
-	coord.xy += ShadowMapOffset;
+		float cz = center.z;
 
-	float2 shadow = 0;
+		float radius = length(frustum.rbn - center);
 
-	[branch]
-	if (coord.w == 0)
-		shadow = ShadowPCF(PSSM1Samp, coord.xy, receiverDepth);
-	else if (coord.w == 1)
-		shadow = ShadowPCF(PSSM2Samp, coord.xy, receiverDepth);
-	else if (coord.w == 2)
-		shadow = ShadowPCF(PSSM3Samp, coord.xy, receiverDepth);
-	else
-		shadow = ShadowPCF(PSSM4Samp, coord.xy, receiverDepth);
+		center = mul(float4(center, 1), matViewInverse).xyz;
 
-	return ChebyshevUpperBound(shadow, receiverDepth, 0.01, LightHardness);
+		if (length2(positionWS - center) <= radius * radius) 
+		{
+			layer = i;
+			float3 lightDirectionWS = -LightDirection;
+			vmat = CreateLightViewMatrixWithCenter(LightDirection, lightDirectionWS, radius + mCascadeShadowZNear, center);
+    		pmat = CreateOrthographicMatrix(-radius, radius, -radius, radius, mCascadeShadowZNear, mCascadeShadowZNear + 2 * radius);
+			break;
+		}
+	}
+
+	float depth = 0;
+	if (layer >= 0) {
+		float3 positionVS = mul(float4(positionWS, 1), vmat).xyz;
+		float4 positionCS = mul(float4(positionVS, 1), pmat);
+
+		depth = positionVS.z;
+		float2 ndcCoord = positionCS.xy / positionCS.w;
+		ndcCoord = PosToCoord(ndcCoord.xy);
+		ndcCoord.xy += 0.5 / float(SHADOW_MAP_SIZE);
+
+		float4 shadowmapSize = float4((1.0 / SHADOW_MAP_SIZE).xx, (SHADOW_MAP_SIZE * 1.0).xx);
+		float sam = 1;
+		if (layer == 0)
+		{
+			clip(tex2Dlod(CSMSamp, float4(ndcCoord, 0, 0)).r - 1e-5);
+			sam = SampleShadowmapFiltered(CSMSamp, ndcCoord, depth, shadowmapSize);
+		}
+		else if (layer == 1)
+		{
+			clip(tex2Dlod(CSM1Samp, float4(ndcCoord, 0, 0)).r - 1e-5);
+			sam = SampleShadowmapFiltered(CSM1Samp, ndcCoord, depth, shadowmapSize);
+		}
+		else if (layer == 2)
+		{
+			clip(tex2Dlod(CSM2Samp, float4(ndcCoord, 0, 0)).r - 1e-5);
+			sam = SampleShadowmapFiltered(CSM2Samp, ndcCoord, depth, shadowmapSize);
+		}
+		else
+		{
+			clip(tex2Dlod(CSM3Samp, float4(ndcCoord, 0, 0)).r - 1e-5);
+			sam = SampleShadowmapFiltered(CSM3Samp, ndcCoord, depth, shadowmapSize);
+		}
+		shadow = sam;
+	}
+
+	return shadow;
 }
 #endif
 
@@ -219,6 +253,16 @@ void GetGbufferParams(float4 texcoord, out MaterialParam material, out MaterialP
 	float4 MRT4 = tex2Dlod(Gbuffer4Map, float4(coord, 0, 0));
 
 	DecodeGbuffer(MRT1, MRT2, MRT3, MRT4, material);
+}
+
+void UseLayer(float4 texcoord, inout float3 diffuse, inout float3 specular, inout float3 diffuseAlpha, inout float3 specularAlpha)
+{
+	float2 coord = texcoord.xy / texcoord.w;
+	float mul = calculateLayer(LayerSamp, coord, mLayers);
+	diffuse *= mul;
+	specular *= mul;
+	diffuseAlpha *= mul;
+	specularAlpha *= mul;
 }
 
 void LightSourceVS(
@@ -264,6 +308,8 @@ void LightSourcePS(
 	ShadingMaterial(material, P1, V, shadow, diffuse, specular);
 	ShadingMaterial(materialAlpha, P2, V, shadow, diffuseAlpha, specularAlpha);
 
+	UseLayer(coord, diffuse, specular, diffuseAlpha, specularAlpha);
+
 	oColor0 = float4(diffuse, 0);
 	oColor1 = float4(specular, 0);
 	oColor2 = float4(diffuseAlpha * materialAlpha.albedo + specularAlpha, 0);
@@ -290,6 +336,8 @@ void LightSourceShadowlessPS(
 
 	ShadingMaterial(material, P1, V, 1, diffuse, specular);
 	ShadingMaterial(materialAlpha, P2, V, 1, diffuseAlpha, specularAlpha);
+
+	UseLayer(coord, diffuse, specular, diffuseAlpha, specularAlpha);
 
 	oColor0 = float4(diffuse, 0);
 	oColor1 = float4(specular, 0);
